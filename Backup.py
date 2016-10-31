@@ -8,20 +8,14 @@ import socket
 import sys
 import colorama
 
+import Settings #Custom Backup Settings
+
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 
-#Backup Sources.
-BackupSources = [
-    ['TestDir1', './', 'root'],
-    ['TestFile1', './Temp1', '0B_Yf1ZVa9N1acjhSTsMwdVJnVDQ'],
-    ['Test File 2', '/Temp 5.py', '0B_Yf1dsa9N1acjhSTUMwdVJnVDQ']
-]
-
-ExcludedFileChecks = ['.DS_Store', 'desktop.ini', 'thumbs.db']
-
-BackupExt = "7z"
-Timing = 1800
+if sys.executable.endswith("pythonw.exe"):
+    sys.stdout = open(os.devnull, "w")
+    sys.stderr = open(os.path.join(os.getenv("TEMP"), "stderr-"+os.path.basename(sys.argv[0])), "w")
 
 def LastModified(Path):
     if os.path.isfile(Path):
@@ -33,7 +27,7 @@ def LastModified(Path):
 
         for root, dirnames, filenames in os.walk(Path):
             for filename in filenames:
-                if os.path.basename(filename) in ExcludedFileChecks:
+                if os.path.basename(filename) in Settings.ExcludedFileChecks:
                     pass
                 else:
                     FileModTime = datetime.fromtimestamp(os.stat(os.path.join(root, filename)).st_mtime)
@@ -71,32 +65,33 @@ drive = GoogleDrive(gauth)
 
 CurrentTime = datetime.now()
 
-for Source in BackupSources:
+for Source in Settings.BackupSources:
     SourceLastModified = LastModified(Source[1])
     ModificationAge = CurrentTime - SourceLastModified
 
     #print "Current Time: " + str(CurrentTime) + "\nModifitcation Age: " + str(ModificationAge) + "\nLast Modified: " + str(SourceLastModified)
 
-    if ModificationAge < timedelta(seconds=Timing):
+    if ModificationAge < timedelta(seconds=Settings.Timing):
         sys.stdout.write('Backing up \"' + Source[0] + '\"...   ')
         sys.stdout.flush()
 
         BackupTime=datetime.today().strftime("%Y%m%d-%H%M%S")
 
         BackupName=Source[0] + " (" + BackupTime + " via " + socket.gethostname() + ")"
-        BackupPath=os.path.join(tempfile.gettempdir(), BackupName + "." + BackupExt)
+        BackupPath=os.path.join(tempfile.gettempdir(), BackupName + "." + Settings.BackupExt)
 
-        cmd = ['7z', 'a', BackupPath, Source[1], '-mx9']
+        cmd = [Settings.SevenZPath, 'a', BackupPath, Source[1], '-mx9']
         sp = subprocess.Popen(cmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).wait()
 
         file2upload = drive.CreateFile({"parents": [{"kind": "drive#fileLink", "id": Source[2]}]})
-        file2upload['title'] = BackupName + "." + BackupExt
+        file2upload['title'] = BackupName + "." + Settings.BackupExt
         file2upload.SetContentFile(BackupPath)
         file2upload.Upload()
 
         try:
             os.remove(BackupPath)
         except WindowsError as e:
+            print "Unable to remove file. (Win32 Error)"
             print "DEBUG ME: " + str(e)
             continue
 
